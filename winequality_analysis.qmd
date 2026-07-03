@@ -1,0 +1,505 @@
+```{python}
+
+# Section 1: Import Libraries
+
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    r2_score,
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    roc_auc_score
+)
+
+from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+
+import matplotlib.pyplot as plt
+
+```
+
+
+```{python}
+
+# Section 2: Load and Parse the Datasets
+
+# The Wine Quality datasets use semicolon (;) as the delimiter.
+
+red_wine = pd.read_csv("winequality-red.csv", sep=";")
+white_wine = pd.read_csv("winequality-white.csv", sep=";")
+
+red_wine["wine_type"] = "Red"
+white_wine["wine_type"] = "White"
+
+wine = pd.concat([red_wine, white_wine], ignore_index=True)
+
+print("Red Wine Shape:", red_wine.shape)
+print("White Wine Shape:", white_wine.shape)
+print("Combined Dataset Shape:", wine.shape)
+
+wine.head()
+
+```
+
+
+
+
+```{python}
+
+# Section 3: Data Cleaning
+
+# Check data structure
+print(wine.info())
+
+# Check missing values
+print("\nMissing Values:")
+print(wine.isnull().sum())
+
+# Check duplicate records
+print("\nDuplicate Rows:", wine.duplicated().sum())
+
+# Remove duplicate rows
+wine = wine.drop_duplicates()
+
+print("\nDataset Shape After Removing Duplicates:")
+print(wine.shape)
+
+# Check data types
+print("\nData Types:")
+print(wine.dtypes)
+
+wine.head()
+
+```
+
+
+
+
+```{python}
+
+# Section 4: Exploratory Data Analysis
+
+print(wine["wine_type"].value_counts())
+print(wine["quality"].value_counts().sort_index())
+
+wine.groupby("wine_type")["quality"].describe()
+
+```
+
+
+
+
+```{python}
+
+# Section 5: Quality Distribution
+
+plt.figure(figsize=(8, 5))
+wine["quality"].value_counts().sort_index().plot(kind="bar")
+plt.title("Wine Quality Distribution")
+plt.xlabel("Quality Score")
+plt.ylabel("Count")
+plt.show()
+
+```
+
+Most wines received quality scores of 5 or 6, indicating that the majority of samples are medium-quality wines. Extremely low-quality (3–4) and high-quality (8–9) wines are relatively rare, resulting in an imbalanced target distribution.
+
+
+```{python}
+
+plt.figure(figsize=(8,5))
+
+wine.groupby("wine_type")["quality"].mean().plot(kind="bar")
+
+plt.title("Average Quality by Wine Type")
+plt.xlabel("Wine Type")
+plt.ylabel("Average Quality")
+
+plt.show()
+
+```
+
+White wines have a slightly higher average quality score than red wines in this dataset.
+
+
+
+```{python}
+
+plt.figure(figsize=(8,6))
+
+wine.boxplot(column="alcohol", by="quality")
+
+plt.suptitle("")
+plt.title("Alcohol Distribution by Wine Quality")
+plt.xlabel("Quality")
+plt.ylabel("Alcohol (%)")
+
+plt.show()
+
+```
+
+Wines with higher quality scores generally have higher alcohol content. The median alcohol level increases as wine quality improves, suggesting a positive relationship between alcohol content and wine quality. However, the presence of outliers indicates that alcohol alone is not sufficient to determine wine quality.
+
+
+```{python}
+
+# Section: Bell-Shaped Quality Distribution by Wine Type with Colors
+
+plt.figure(figsize=(8, 5))
+
+wine[wine["wine_type"] == "Red"]["quality"].plot(
+    kind="kde",
+    label="Red Wine",
+    color="red",
+    linewidth=2
+)
+
+wine[wine["wine_type"] == "White"]["quality"].plot(
+    kind="kde",
+    label="White Wine",
+    color="blue",
+    linewidth=2
+)
+
+plt.title("Wine Quality Distribution: Red vs White")
+plt.xlabel("Quality Score")
+plt.ylabel("Density")
+plt.legend()
+plt.grid(True)
+
+plt.show()
+
+```
+
+
+
+```{python}
+
+# Section 6: Correlation Analysis
+
+numeric_cols = wine.select_dtypes(include=["int64", "float64"]).columns
+
+corr = wine[numeric_cols].corr()
+
+plt.figure(figsize=(10, 8))
+plt.imshow(corr, aspect="auto")
+plt.colorbar()
+plt.xticks(range(len(corr.columns)), corr.columns, rotation=90)
+plt.yticks(range(len(corr.columns)), corr.columns)
+plt.title("Correlation Heatmap")
+plt.show()
+
+corr["quality"].sort_values(ascending=False)
+
+```
+
+
+Alcohol has the strongest positive correlation with wine quality (0.469), suggesting that wines with higher alcohol content tend to receive higher quality scores. In contrast, density (-0.326) and volatile acidity (-0.265) show the strongest negative correlations, indicating that higher density and volatile acidity are generally associated with lower-quality wines. Most other chemical properties have relatively weak correlations with wine quality, suggesting that wine quality is influenced by multiple factors rather than a single characteristic.
+
+
+```{python}
+
+# Section 7: Research Question 1
+# Can we predict wine quality score based on chemical features?
+# Best model used here: Random Forest Regressor
+
+X = wine.drop(columns=["quality"])
+y = wine["quality"]
+
+X = pd.get_dummies(X, columns=["wine_type"], drop_first=True)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42
+)
+
+rf_reg = RandomForestRegressor(
+    n_estimators=300,
+    random_state=42,
+    max_depth=None
+)
+
+rf_reg.fit(X_train, y_train)
+
+y_pred = rf_reg.predict(X_test)
+
+mae = mean_absolute_error(y_test, y_pred)
+rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+r2 = r2_score(y_test, y_pred)
+
+print("Random Forest Regression Results")
+print("MAE:", mae)
+print("RMSE:", rmse)
+print("R2 Score:", r2)
+
+```
+
+
+The Random Forest Regressor achieved an MAE of 0.509, an RMSE of 0.663, and an R² score of 0.415. On average, the model predicts wine quality within approximately half a quality point. While the model captures part of the relationship between chemical properties and wine quality, the moderate R² score suggests that additional factors beyond the available features also influence wine quality.
+
+```{python}
+
+# Section 8: Actual vs Predicted Wine Quality
+
+results_reg = pd.DataFrame({
+    "Actual Quality": y_test,
+    "Predicted Quality": y_pred
+})
+
+results_reg.head(20)
+
+
+```
+
+
+
+
+```{python}
+
+# Section 9: Feature Importance for Quality Prediction
+
+feature_importance = pd.DataFrame({
+    "Feature": X.columns,
+    "Importance": rf_reg.feature_importances_
+}).sort_values(by="Importance", ascending=False)
+
+print(feature_importance)
+
+plt.figure(figsize=(10, 6))
+plt.barh(feature_importance["Feature"], feature_importance["Importance"])
+plt.gca().invert_yaxis()
+plt.title("Feature Importance for Wine Quality Prediction")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+plt.show()
+
+```
+
+Alcohol is the most important feature for predicting wine quality, contributing 26.3% of the model's importance. Volatile acidity is the second most influential feature, followed by free sulfur dioxide, sulphates, and total sulfur dioxide. In contrast, wine type (Red or White) has almost no impact on quality prediction, indicating that chemical properties are much more important than the wine category itself.
+
+```{python}
+
+# Section 10: Research Question 2
+# Can we classify whether a wine is high quality?
+# High quality is defined as quality >= 7.
+# Best model used here: Random Forest Classifier
+
+wine_class = wine.copy()
+wine_class["high_quality"] = np.where(wine_class["quality"] >= 7, 1, 0)
+
+X = wine_class.drop(columns=["quality", "high_quality"])
+y = wine_class["high_quality"]
+
+X = pd.get_dummies(X, columns=["wine_type"], drop_first=True)
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+rf_clf = RandomForestClassifier(
+    n_estimators=300,
+    random_state=42,
+    class_weight="balanced"
+)
+
+rf_clf.fit(X_train, y_train)
+
+y_pred = rf_clf.predict(X_test)
+y_prob = rf_clf.predict_proba(X_test)[:, 1]
+
+print("Random Forest Classification Results")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("ROC AUC:", roc_auc_score(y_test, y_prob))
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred))
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+
+```
+
+The Random Forest classifier achieved an accuracy of 83.8% and an ROC AUC of 0.876, indicating good overall classification performance. The model performs very well in identifying low-quality wines (Precision = 0.91, Recall = 0.89). However, the performance for high-quality wines is lower (F1-score = 0.60), mainly due to the imbalanced class distribution. Overall, the model provides reliable predictions while leaving room for improvement in detecting high-quality wines.
+
+
+
+
+```{python}
+
+# Section 11: Feature Importance for High-Quality Wine Classification
+
+feature_importance_clf = pd.DataFrame({
+    "Feature": X.columns,
+    "Importance": rf_clf.feature_importances_
+}).sort_values(by="Importance", ascending=False)
+
+print(feature_importance_clf)
+
+plt.figure(figsize=(10, 6))
+plt.barh(feature_importance_clf["Feature"], feature_importance_clf["Importance"])
+plt.gca().invert_yaxis()
+plt.title("Feature Importance for High-Quality Wine Classification")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+plt.show()
+
+
+```
+
+Alcohol is the most important feature for identifying high-quality wines, followed by density, chlorides, volatile acidity, and total sulfur dioxide. These results suggest that multiple chemical properties jointly influence whether a wine is classified as high quality. Similar to the regression model, wine type has almost no predictive value once the chemical characteristics are considered.
+
+
+```{python}
+
+# Section 12: Research Question 3
+# Can we predict whether a wine is red or white based on chemical properties?
+
+X = wine.drop(columns=["wine_type", "quality"])
+y = wine["wine_type"].map({"Red": 0, "White": 1})
+
+print(y.value_counts())
+print(y.isnull().sum())
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=y
+)
+
+type_model = RandomForestClassifier(
+    n_estimators=300,
+    random_state=42
+)
+
+type_model.fit(X_train, y_train)
+
+y_pred = type_model.predict(X_test)
+y_prob = type_model.predict_proba(X_test)[:, 1]
+
+print("Wine Type Classification Results")
+print("Accuracy:", accuracy_score(y_test, y_pred))
+print("ROC AUC:", roc_auc_score(y_test, y_prob))
+print("\nClassification Report:")
+print(classification_report(y_test, y_pred, target_names=["Red", "White"]))
+print("\nConfusion Matrix:")
+print(confusion_matrix(y_test, y_pred))
+
+```
+
+The Random Forest classifier achieved an accuracy of 99.4% and an ROC AUC of 0.999, demonstrating excellent performance in distinguishing red and white wines. The model correctly classified nearly all samples, indicating that the chemical properties of red and white wines are highly distinctive.
+
+
+```{python}
+# Section 13: Feature Importance for Wine Type Classification
+
+type_importance = pd.DataFrame({
+    "Feature": X.columns,
+    "Importance": type_model.feature_importances_
+}).sort_values(by="Importance", ascending=False)
+
+print(type_importance)
+
+plt.figure(figsize=(10, 6))
+plt.barh(type_importance["Feature"], type_importance["Importance"])
+plt.gca().invert_yaxis()
+plt.title("Feature Importance for Red vs White Wine Classification")
+plt.xlabel("Importance")
+plt.ylabel("Feature")
+plt.show()
+
+
+```
+
+Total sulfur dioxide is the most important feature for distinguishing red and white wines, followed by chlorides and volatile acidity. These chemical properties provide strong discriminatory power between the two wine types, while alcohol contributes relatively little to wine type classification.
+
+```{python}
+
+# Section 14: Research Question 4
+# Can we segment wines into different chemical profile groups?
+# Model used here: K-Means Clustering
+
+cluster_data = wine.drop(columns=["quality", "wine_type"])
+
+scaler = StandardScaler()
+cluster_scaled = scaler.fit_transform(cluster_data)
+
+inertia = []
+
+for k in range(2, 10):
+    kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+    kmeans.fit(cluster_scaled)
+    inertia.append(kmeans.inertia_)
+
+plt.figure(figsize=(8, 5))
+plt.plot(range(2, 10), inertia, marker="o")
+plt.title("Elbow Method for K-Means")
+plt.xlabel("Number of Clusters")
+plt.ylabel("Inertia")
+plt.show()
+
+
+```
+
+best_k = 4
+
+```{python}
+# Section 15: K-Means Final Model
+
+best_k = 4
+
+kmeans = KMeans(n_clusters=best_k, random_state=42, n_init=10)
+wine["cluster"] = kmeans.fit_predict(cluster_scaled)
+
+cluster_summary = wine.groupby("cluster").agg({
+    "fixed acidity": "mean",
+    "volatile acidity": "mean",
+    "citric acid": "mean",
+    "residual sugar": "mean",
+    "chlorides": "mean",
+    "free sulfur dioxide": "mean",
+    "total sulfur dioxide": "mean",
+    "density": "mean",
+    "pH": "mean",
+    "sulphates": "mean",
+    "alcohol": "mean",
+    "quality": "mean",
+    "wine_type": lambda x: x.value_counts().index[0]
+}).reset_index()
+
+cluster_summary
+
+
+```
+
+The K-Means algorithm identified four distinct wine segments with different chemical characteristics. Cluster 1 achieved the highest average quality score (6.07) and is mainly composed of white wines with relatively higher alcohol content and lower density. Cluster 0 has the lowest average quality score (5.38) and is characterized by higher volatile acidity, suggesting that different chemical profiles are associated with different quality levels.
+
+
+```{python}
+
+# Section 16: PCA Visualization for Wine Clusters
+
+pca = PCA(n_components=2)
+pca_result = pca.fit_transform(cluster_scaled)
+
+wine["PCA1"] = pca_result[:, 0]
+wine["PCA2"] = pca_result[:, 1]
+
+plt.figure(figsize=(8, 6))
+plt.scatter(wine["PCA1"], wine["PCA2"], c=wine["cluster"], alpha=0.6)
+plt.title("Wine Segmentation Using K-Means and PCA")
+plt.xlabel("PCA Component 1")
+plt.ylabel("PCA Component 2")
+plt.colorbar(label="Cluster")
+plt.show()
+
+```
+
+The PCA visualization shows that the K-Means algorithm successfully separated the wines into four distinct clusters. Although there is some overlap near the cluster boundaries, most samples form relatively compact groups, indicating that wines can be segmented into different chemical profiles based on their physicochemical properties.
+
+
+# Final Conclusion
+
+This project combined the Red and White Wine Quality datasets to investigate four key research questions using exploratory data analysis and machine learning techniques. The analysis showed that alcohol content is the strongest positive indicator of wine quality, while density and volatile acidity are negatively associated with quality. The Random Forest Regressor achieved reasonable predictive performance (MAE = 0.509, RMSE = 0.663, R² = 0.415), indicating that chemical properties explain a substantial portion of wine quality but cannot fully capture the subjective nature of wine evaluation. The Random Forest Classifier successfully identified high-quality wines with an accuracy of 83.8% and an ROC AUC of 0.876, while achieving 99.4% accuracy in distinguishing red and white wines, demonstrating that the two wine types have highly distinctive chemical characteristics. Finally, K-Means clustering identified four meaningful wine segments with different chemical profiles and average quality levels. Overall, the results demonstrate that machine learning is an effective tool for predicting wine quality, classifying wine types, and discovering meaningful patterns in wine composition, providing valuable insights for quality assessment, product segmentation, and decision-making in the wine industry.
